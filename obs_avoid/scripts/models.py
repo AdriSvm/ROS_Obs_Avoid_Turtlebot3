@@ -7,9 +7,9 @@ class ObstacleAvoider:
 
 
     def __init__(self):
-        rospy.init_node('obstacle_avoider', anonymous=True)
-        rospy.Subscriber('/scan', LaserScan, self.callback)
+        rospy.init_node('obs_avoid', anonymous=True)
         self.pub = rospy.Publisher('/cmd_vel', Twist, queue_size=1)
+        rospy.Subscriber('/scan', LaserScan, self.callback)
         rospy.spin()
 
     @staticmethod
@@ -40,17 +40,15 @@ class ObstacleAvoider:
 
         return speed, turn,state_desc
 
-    @staticmethod
-    def take_action(regions,vel_normal_linear=1,mode='assertive'):
+    def take_action(self,regions,vel_normal_linear=1,mode='assertive'):
         msg = Twist()
         linear_x,angular_z,state_description = ObstacleAvoider.calculate_velocity(regions,vel_normal_linear)
-        rospy.loginfo(f"Setting speed: linear={speed}, angular={turn}")
+        rospy.loginfo(f"Setting speed: linear={linear_x}, angular={angular_z}, state={state_description}")
         msg.linear.x = linear_x
         msg.angular.z = angular_z
-        pub.publish(msg)
+        self.pub.publish(msg)
 
-    @staticmethod
-    def callback(data):
+    def callback(self,data):
         regions = {
             'right': min(min(data.ranges[0:143]), 3),
             'fright': min(min(data.ranges[144:287]), 3),
@@ -58,7 +56,7 @@ class ObstacleAvoider:
             'fleft': min(min(data.ranges[432:575]), 3),
             'left': min(min(data.ranges[576:719]), 3),
         }
-        take_action(regions)
+        self.take_action(regions)
 
 
 
