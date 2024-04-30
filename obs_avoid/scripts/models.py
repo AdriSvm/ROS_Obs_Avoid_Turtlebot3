@@ -1,21 +1,65 @@
 #!/usr/bin/env python3
+import rospy
+from sensor_msgs.msg import LaserScan
+from geometry_msgs.msg import Twist
 
 class ObstacleAvoider:
-    regions = {
-        "front": (-25,25),
-        "rear": (155,205),
-        "front_right": (26, 66),
-        "rear_right": (116, 156),
-        "right": (67, 115),
-        "front_left": (-65, -25),
-        "rear_left": (-115, -65),
-        "left": (-155, -115)
-    }
 
-    def __init__(self,vel_publisher,scan_subscriber,obstacle_threshold=0.5,normal_lin_vel=1):
-        self.vel_publisher = vel_publisher
-        self.scan_subscriber = scan_subscriber
-        self.obstacle_threshold = obstacle_threshold
-        self.normal_lin_vel = normal_lin_vel
+
+    def __init__(self):
+        rospy.init_node('obstacle_avoider', anonymous=True)
+        rospy.Subscriber('/scan', LaserScan, self.callback)
+        self.pub = rospy.Publisher('/cmd_vel', Twist, queue_size=1)
+        rospy.spin()
+
+    @staticmethod
+    def calculate_velocity(regions,speed=0.5,turn=0.0):
+        if regions['front'] < 0.6:
+            # Frente bloqueado, se requiere una acción inmediata
+            speed = 0
+            if regions['fleft'] > regions['fright']:
+                turn = 1.0  # Giro fuerte a la izquierda
+            else:
+                turn = -1.0  # Giro fuerte a la derecha
+            state_desc = "Heavy obstacle"
+        else:
+            # Frente despejado o parcialmente despejado
+            if regions['fleft'] < 1.2 or regions['fright'] < 1.2:
+                # Obstáculo cercano a un lado
+                if regions['fleft'] < regions['fright']:
+                    turn = -0.5
+                else:
+                    turn = 0.5
+                state_desc = "Light obstacle"
+                speed = 0.3
+            else:
+                # Velocidad normal si todo está despejado
+                speed = 0.5
+                turn = 0.0
+                state_desc = "No obstacle"
+
+        return speed, turn,state_desc
+
+    @staticmethod
+    def take_action(regions,vel_normal_linear=1,mode='assertive'):
+        msg = Twist()
+        linear_x,angular_z,state_description = ObstacleAvoider.calculate_velocity(regions,vel_normal_linear)
+        rospy.loginfo(f"Setting speed: linear={speed}, angular={turn}")
+        msg.linear.x = linear_x
+        msg.angular.z = angular_z
+        pub.publish(msg)
+
+    @staticmethod
+    def callback(data):
+        regions = {
+            'right': min(min(data.ranges[0:143]), 3),
+            'fright': min(min(data.ranges[144:287]), 3),
+            'front': min(min(data.ranges[288:431]), 3),
+            'fleft': min(min(data.ranges[432:575]), 3),
+            'left': min(min(data.ranges[576:719]), 3),
+        }
+        take_action(regions)
+
+
 
 
