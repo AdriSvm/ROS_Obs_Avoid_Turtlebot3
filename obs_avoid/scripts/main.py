@@ -1,12 +1,26 @@
 #!/usr/bin/env python3
-import rospy
+import numpy as np
+import rospy,time
 from sensor_msgs.msg import LaserScan
 from geometry_msgs.msg import Twist
+from collections import deque
 
+history_length = 10
+regions_history = {
+    'right':  deque(maxlen=history_length),
+    'fright': deque(maxlen=history_length),
+    'front':  deque(maxlen=history_length),
+    'fleft':  deque(maxlen=history_length),
+    'left':   deque(maxlen=history_length),
+    'rear':   deque(maxlen=history_length),
+}
+
+actions_history = deque(maxlen=history_length)
 
 class ObstacleAvoider:
 
     def __init__(self):
+        time.sleep(0.2)
         rospy.init_node('obs_avoid', anonymous=True)
         self.pub = rospy.Publisher('/cmd_vel', Twist, queue_size=1)
         rospy.Subscriber('/scan', LaserScan, self.callback)
@@ -14,48 +28,116 @@ class ObstacleAvoider:
 
     @staticmethod
     def calculate_velocity(regions, speed=0.5, turn=0.0):
-        if regions['front'] < 0.6:
+        '''if regions['front'] < 1:
             # Frente bloqueado, se requiere una acción inmediata
             speed = 0
             if regions['fleft'] > regions['fright']:
-                turn = 1.0  # Giro fuerte a la izquierda
+                turn = 2.0  # Giro fuerte a la izquierda
             else:
-                turn = -1.0  # Giro fuerte a la derecha
+                turn = -2.0  # Giro fuerte a la derecha
             state_desc = "Heavy obstacle"
         else:
             # Frente despejado o parcialmente despejado
             if regions['fleft'] < 1.2 or regions['fright'] < 1.2:
                 # Obstáculo cercano a un lado
                 if regions['fleft'] < regions['fright']:
-                    turn = -0.5
+                    turn = -1.5
                 else:
-                    turn = 0.5
+                    turn = 1.5
                 state_desc = "Light obstacle"
-                speed = 0.3
+                speed = speed * 0.3
             else:
                 # Velocidad normal si todo está despejado
                 speed = 0.5
                 turn = 0.0
-                state_desc = "No obstacle"
+                state_desc = "No obstacle"'''
+
+        # Analizar el historial para tomar decisiones
+        average_distances = {region: np.mean(regions_history[region]) for region in regions_history}
+        min_distances = {region: min(regions_history[region]) for region in regions_history}
+
+        # Ejemplo de decisión basada en el promedio de distancias
+        if regions['front'] < 0.2:
+            if regions['rear'] > 0.2:
+                speed = -0.1
+                turn = 0
+                turning = 'none'
+                state_desc = "Heavy obstacle, going backwards"
+            else:
+                speed = 0
+                if average_distances['fleft'] > average_distances['fright']:
+                    turn,turning = -1.0* max(average_distances['fleft'],0.5),'left'
+                else:
+                    turn, turning = 1.0 * max(average_distances['fright'], 0.5), 'right'
+                state_desc = "Heavy obstacle, rotating"
+
+        elif regions['front'] < 0.8:
+            speed = speed * min_distances['front']
+            if average_distances['fleft'] < 0.4 and average_distances['fright'] > 0.9:
+                turn = 0.4
+                turning = 'right'
+            elif average_distances['fright'] < 0.4 and average_distances['fleft'] > 0.9:
+                turn = -0.4
+            else:
+                if average_distances['fleft'] > average_distances['fright']:
+                    turn = -0.7
+                    turning = 'left'
+                else:
+                    turn = 0.7
+                    turning = 'right'
+            state_desc = "Light obstacle"
+        else:
+            state_desc = "No obstacle"
+            if min_distances['fleft'] < 1.2 or min_distances['fright'] < 1.2:
+                speed = speed * min(min_distances['front'],3)
+                if regions['fleft'] < regions['fright'] and average_distances['fleft'] < 0.4:
+                        turn = 0.5 * max(average_distances['fleft'],0.75)
+                        turning = 'right'
+                elif regions['fleft'] > regions['fright'] and average_distances['fright'] < 0.4:
+                        turn = -0.5 * max(average_distances['fright'],0.75)
+                        turning = 'left'
+
+        lefts = sum([1 if action == 'left' else 0 for action in actions_history])
+        rights = sum([1 if action == 'right' else 0 for action in actions_history])
+        last_turn = actions_history[-1] if actions_history else None
+
+        if last_turn == 'left' and lefts < len(actions_history)*0.7 and rights > len(actions_history)*0.2:
+            turn = -abs(turn)
+            turning = 'left'
+            state_desc = "Avoiding right turn"
+
+        if last_turn == 'right' and rights < len(actions_history)*0.7 and lefts > len(actions_history)*0.2:
+            turn = abs(turn)
+            turning = 'right'
+            state_desc = "Avoiding left turn"
+
+        actions_history.append(state_desc)
 
         return speed, turn, state_desc
 
-    def take_action(self, regions, vel_normal_linear=1, mode='assertive'):
+    def take_action(self, regions, vel_normal_linear=0.4, mode='assertive'):
         msg = Twist()
         linear_x, angular_z, state_description = ObstacleAvoider.calculate_velocity(regions, vel_normal_linear)
         rospy.loginfo(f"Setting speed: linear={linear_x}, angular={angular_z}, state={state_description}")
         msg.linear.x = linear_x
         msg.angular.z = angular_z
+
         self.pub.publish(msg)
 
     def callback(self, data):
         regions = {
-            'right': min(min(data.ranges[0:143]), 3),
-            'fright': min(min(data.ranges[144:287]), 3),
-            'front': min(min(data.ranges[288:431]), 3),
-            'fleft': min(min(data.ranges[432:575]), 3),
-            'left': min(min(data.ranges[576:719]), 3),
+            'right': min(data.ranges[55:90] or [float('inf')]),
+            'fright': min(data.ranges[25:55] or [float('inf')]),
+            'front': min(data.ranges[-25::]+data.ranges[0:25] or [float('inf')]),
+            'fleft': min(data.ranges[-55:-25] or [float('inf')]),
+            'left': min(data.ranges[-90:-55] or [float('inf')]),
+            'rear': min(data.ranges[90:270] or [float('inf')]),
         }
+
+
+        for region in regions_history:
+            regions_history[region].append(regions[region])
+
         self.take_action(regions)
 
 
