@@ -28,30 +28,6 @@ class ObstacleAvoider:
 
     @staticmethod
     def calculate_velocity(regions, speed=0.5, turn=0.0):
-        '''if regions['front'] < 1:
-            # Frente bloqueado, se requiere una acción inmediata
-            speed = 0
-            if regions['fleft'] > regions['fright']:
-                turn = 2.0  # Giro fuerte a la izquierda
-            else:
-                turn = -2.0  # Giro fuerte a la derecha
-            state_desc = "Heavy obstacle"
-        else:
-            # Frente despejado o parcialmente despejado
-            if regions['fleft'] < 1.2 or regions['fright'] < 1.2:
-                # Obstáculo cercano a un lado
-                if regions['fleft'] < regions['fright']:
-                    turn = -1.5
-                else:
-                    turn = 1.5
-                state_desc = "Light obstacle"
-                speed = speed * 0.3
-            else:
-                # Velocidad normal si todo está despejado
-                speed = 0.5
-                turn = 0.0
-                state_desc = "No obstacle"'''
-
         # Analizar el historial para tomar decisiones
         average_distances = {region: np.mean(regions_history[region]) for region in regions_history}
         min_distances = {region: min(regions_history[region]) for region in regions_history}
@@ -131,7 +107,7 @@ class ObstacleAvoider:
             'front': min(data.ranges[-25::]+data.ranges[0:25] or [float('inf')]),
             'fleft': min(data.ranges[-55:-25] or [float('inf')]),
             'left': min(data.ranges[-90:-55] or [float('inf')]),
-            'rear': min(data.ranges[90:270] or [float('inf')]),
+            'rear': min(data.ranges[120:240] or [float('inf')]),
         }
 
 
