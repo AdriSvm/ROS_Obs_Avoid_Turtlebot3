@@ -103,7 +103,7 @@ class ObstacleAvoider:
         self.pub.publish(msg)
 
     def callback(self, data):
-        if all(data.ranges[-25::]+data.ranges[0:25]) < 0.09 and all(data.ranges[25:55]) < 0.09 and all(data.ranges[-55:-25]) < 0.09:
+        if all(data.ranges[-90::]+data.ranges[0:90]) < 0.09 :
             regions = {
                 'right': min(data.ranges[55:90] or [float('inf')]),
                 'fright': min(data.ranges[25:55] or [float('inf')]),
@@ -113,7 +113,7 @@ class ObstacleAvoider:
                 'rear': min(data.ranges[120:240] or [float('inf')]),
             }
         else:
-            data.ranges = [float('inf') if x == 0 else x for x in data.ranges]
+            data.ranges = [float('inf') if x < 0.03 else x for x in data.ranges]
             regions = {
                 'right': min(data.ranges[55:90] or [float('inf')]),
                 'fright': min(data.ranges[25:55] or [float('inf')]),
