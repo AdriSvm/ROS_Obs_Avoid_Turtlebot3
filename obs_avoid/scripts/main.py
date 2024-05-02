@@ -33,7 +33,7 @@ class ObstacleAvoider:
         min_distances = {region: min(regions_history[region]) for region in regions_history}
 
         # Ejemplo de decisión basada en el promedio de distancias
-        print(regions)
+        print({i:j.round(2) for i,j in regions.items()})
         turning = None
         if regions['front'] < 0.1:
             if regions['rear'] > 0.05:
