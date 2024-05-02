@@ -103,7 +103,7 @@ class ObstacleAvoider:
         self.pub.publish(msg)
 
     def callback(self, data):
-        if all(data.ranges[-90::]+data.ranges[0:90]) < 0.02 :
+        if all(data.ranges[-90::]+data.ranges[:90]) < 0.02 :
             regions = {
                 'right': 0,
                 'fright':0,
