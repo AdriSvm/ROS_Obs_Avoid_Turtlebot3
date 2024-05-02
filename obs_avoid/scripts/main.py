@@ -50,7 +50,7 @@ class ObstacleAvoider:
                 state_desc = "Heavy obstacle, rotating"
 
         elif regions['front'] < 1.4:
-            speed = speed * min_distances['front']
+            speed = speed * max(min_distances['front'],1)**2
             if average_distances['fleft'] < 0.4 and average_distances['fright'] > 0.9:
                 turn = 0.4
                 turning = 'right'
@@ -67,7 +67,7 @@ class ObstacleAvoider:
         else:
             state_desc = "No obstacle"
             if min_distances['fleft'] < 1.2 or min_distances['fright'] < 1.2:
-                speed = speed * min(min_distances['front'],3)
+                speed = speed * min(min_distances['front'],3)**2
                 if regions['fleft'] < regions['fright'] and average_distances['fleft'] < 0.1:
                         turn = 0.5 * max(average_distances['fleft'],0.75)
                         turning = 'right'
