@@ -104,6 +104,7 @@ class ObstacleAvoider:
 
     def callback(self, data):
         if all(data.ranges[-90::]+data.ranges[:90]) < 0.02 :
+            print(1)
             regions = {
                 'right': 0,
                 'fright':0,
@@ -113,6 +114,7 @@ class ObstacleAvoider:
                 'rear': min(data.ranges[150:210] or [float('inf')]),
             }
         else:
+            print(2)
             data.ranges = [float('inf') if x < 0.02 else x for x in data.ranges]
             regions = {
                 'right': min(data.ranges[55:90] or [float('inf')]),
