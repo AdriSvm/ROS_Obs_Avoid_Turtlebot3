@@ -113,7 +113,9 @@ class ObstacleAvoider:
     def take_action(self, regions, vel_normal_linear=0.4, mode='assertive'):
         msg = Twist()
         linear_x, angular_z, state_description = ObstacleAvoider.calculate_velocity(regions, vel_normal_linear)
-        rospy.loginfo(f"Setting speed: linear={linear_x}, angular={angular_z}, state={state_description}")
+        rospy.loginfo(f"Setting speed: linear={linear_x}, angular={angular_z}, "
+                      f"state={state_description},position:{self.get_robot_position()},"
+                      f"deviation:{self.calculate_goal_direction(self.get_robot_position())}")
         msg.linear.x = linear_x
         msg.angular.z = angular_z
 
