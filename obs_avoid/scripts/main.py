@@ -87,7 +87,7 @@ class ObstacleAvoider:
             turning = 'right'
             state_desc = "Avoiding left turn"
 
-        actions_history.append(state_desc)
+        actions_history.append(turning)
 
         return speed, turn, state_desc
 
