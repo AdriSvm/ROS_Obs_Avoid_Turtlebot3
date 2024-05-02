@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 import numpy as np
-import rospy,time
+import rospy,time, tf2_ros, math
 from sensor_msgs.msg import LaserScan
-from geometry_msgs.msg import Twist
+from geometry_msgs.msg import Twist, PoseStamped, Point
 from collections import deque
+from tf2_geometry_msgs import PointStamped
 
 history_length = 10
 regions_history = {
@@ -19,12 +20,28 @@ actions_history = deque(maxlen=actions_history_length)
 
 class ObstacleAvoider:
 
-    def __init__(self):
+    def __init__(self,goal_x=3.0,goal_y=-2.0,goal_z=0.0):
         time.sleep(0.2)
         rospy.init_node('obs_avoid', anonymous=True)
         self.pub = rospy.Publisher('/cmd_vel', Twist, queue_size=1)
         rospy.Subscriber('/scan', LaserScan, self.callback)
+        self.tf_buffer = tf2_ros.Buffer()
+        self.listener = tf2_ros.TransformListener(self.tf_buffer)
+        self.goal = Point(x=goal_x, y=goal_y, z=goal_z)  # Ejemplo de objetivo
         rospy.spin()
+
+    def get_robot_position(self):
+        try:
+            trans = self.tf_buffer.lookup_transform('map', 'base_link', rospy.Time(0))
+            return trans.transform.translation
+        except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
+            return None
+
+    def calculate_goal_direction(self, position):
+        dx = self.goal.x - position.x
+        dy = self.goal.y - position.y
+        return math.atan2(dy, dx)
+
 
     @staticmethod
     def calculate_velocity(regions, speed=1, turn=0.0):
