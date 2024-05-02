@@ -27,7 +27,7 @@ class ObstacleAvoider:
         rospy.spin()
 
     @staticmethod
-    def calculate_velocity(regions, speed=0.5, turn=0.0):
+    def calculate_velocity(regions, speed=1, turn=0.0):
         # Analizar el historial para tomar decisiones
         average_distances = {region: np.mean(regions_history[region]) for region in regions_history}
         min_distances = {region: min(regions_history[region]) for region in regions_history}
