@@ -5,6 +5,7 @@ from sensor_msgs.msg import LaserScan
 from geometry_msgs.msg import Twist, PoseStamped, Point
 from collections import deque
 from tf2_geometry_msgs import PointStamped
+import tf.transformations
 
 history_length = 10
 regions_history = {
@@ -18,30 +19,84 @@ regions_history = {
 actions_history_length = 30
 actions_history = deque(maxlen=actions_history_length)
 
+goal_position = None
+
 class ObstacleAvoider:
 
-    def __init__(self,goal_x=3.0,goal_y=-2.0,goal_z=0.0):
+    def __init__(self,goal_x=0.0,goal_y=3.0,goal_z=0.0):
         time.sleep(0.2)
         rospy.init_node('obs_avoid', anonymous=True)
         self.pub = rospy.Publisher('/cmd_vel', Twist, queue_size=1)
         rospy.Subscriber('/scan', LaserScan, self.callback)
         self.tf_buffer = tf2_ros.Buffer()
         self.listener = tf2_ros.TransformListener(self.tf_buffer)
-        self.goal = Point(x=goal_x, y=goal_y, z=goal_z)  # Ejemplo de objetivo
+        robot_pos = self.get_robot_position()
+        self.goal_x = goal_x
+        self.goal_y = goal_y
+        self.goal_z = goal_z
+
+        #if not robot_pos:
+        #    raise Exception("Robot position not found, Make sure the slam_gmapping node is running with map and link_footprint frames")
+
+        global goal_position
+        goal_position = self.calculate_goal_position(robot_pos,goal_x,goal_y,goal_z)
+
         rospy.spin()
+
+    def calculate_goal_position(self,robot_position,x,y,rotz):
+        if not robot_position:
+            return None
+        else:
+            current_position = robot_position.translation
+            current_orientation = robot_position.rotation
+
+        final_x = current_position.x + x
+        final_y = current_position.y + y
+
+        current_euler = tf.transformations.euler_from_quaternion(
+            [current_orientation.x, current_orientation.y, current_orientation.z, current_orientation.w]
+        )
+        new_rotation = tf.transformations.quaternion_from_euler(
+            current_euler[0], current_euler[1], current_euler[2] + rotz
+        )
+
+        destination = PoseStamped()
+        destination.header.stamp = rospy.Time.now()
+        destination.header.frame_id = 'map'
+        destination.pose.position.x = final_x
+        destination.pose.position.y = final_y
+        destination.pose.position.z = current_position.z  # Asumiendo que z no cambia
+        destination.pose.orientation.x = new_rotation[0]
+        destination.pose.orientation.y = new_rotation[1]
+        destination.pose.orientation.z = new_rotation[2]
+        destination.pose.orientation.w = new_rotation[3]
+        print(destination.pose.position.x,destination.pose.position.y)
+        return destination
 
     def get_robot_position(self):
         try:
-            trans = self.tf_buffer.lookup_transform('map', 'base_link', rospy.Time(0))
-            return trans.transform.translation
-        except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
-            return None
+            trans = self.tf_buffer.lookup_transform('map', 'base_footprint', rospy.Time(0))
+            return trans.transform
+        except tf2_ros.LookupException as e:
+            rospy.logerr(f"Error al buscar transformación: {e}")
+        except tf2_ros.ConnectivityException as e:
+            rospy.logerr(f"Problema de conectividad con tf2: {e}")
+        except tf2_ros.ExtrapolationException as e:
+            rospy.logerr(f"Error de extrapolación en tf2: {e}")
+        return None
 
     def calculate_goal_direction(self, position):
-        dx = self.goal.x - position.x
-        dy = self.goal.y - position.y
+
+        dx = goal_position.pose.position.x - position.translation.x
+        dy = goal_position.pose.position.y - position.translation.y
+        print("diffs",dx,dy)
         return math.atan2(dy, dx)
 
+    def dist_to_goal(self,position):
+        return math.sqrt((goal_position.pose.position.x - position.translation.x)**2 + (goal_position.pose.position.y - position.translation.y)**2)
+
+    def goal_accomplished(self,position):
+        return self.dist_to_goal(position) < 0.5
 
     @staticmethod
     def calculate_velocity(regions, speed=1, turn=0.0):
@@ -110,21 +165,79 @@ class ObstacleAvoider:
 
         return speed, turn, state_desc
 
+    @staticmethod
+    def calculate_turn(regions, goal_direction,position):
+        # Comenzamos asumiendo que el robot puede avanzar hacia el objetivo directamente
+        if round(goal_direction,2) == round(position.rotation.z,2):
+            turn_angle = 0
+        else:
+            if goal_direction > position.rotation.z:
+                turn_angle = -0.1 * (abs(goal_direction - position.rotation.z)+1)
+            else:
+                turn_angle = 0.1 * (abs(goal_direction - position.rotation.z)+1)
+        state_description = "Heading towards the goal"
+
+        # Verificar si hay obstáculos en la dirección del objetivo
+        if regions['front'] < 1.0:  # Si hay un obstáculo cercano al frente
+            if regions['fleft'] < regions['fright']:
+                # Si el lado izquierdo está más libre que el derecho, gira a la izquierda
+                turn_angle += 0.5  # Ajustar ángulo adecuadamente
+                state_description = "Obstacle ahead, turning left"
+            else:
+                # Si el lado derecho está más libre que el izquierdo, gira a la derecha
+                turn_angle -= 0.5  # Ajustar ángulo adecuadamente
+                state_description = "Obstacle ahead, turning right"
+        elif regions['fleft'] < 0.5:
+            # Si hay un obstáculo cercano a la izquierda, ajusta el giro hacia la derecha
+            turn_angle -= 0.3
+            state_description = "Obstacle on left, turning right"
+        elif regions['fright'] < 0.5:
+            # Si hay un obstáculo cercano a la derecha, ajusta el giro hacia la izquierda
+            turn_angle += 0.3
+            state_description = "Obstacle on right, turning left"
+
+        turn_angle = 0.7 if turn_angle > 0.7 else turn_angle
+
+        return turn_angle, state_description
+
     def take_action(self, regions, vel_normal_linear=0.4, mode='assertive'):
         msg = Twist()
-        linear_x, angular_z, state_description = ObstacleAvoider.calculate_velocity(regions, vel_normal_linear)
-        rospy.loginfo(f"Setting speed: linear={linear_x}, angular={angular_z}, "
-                      f"state={state_description},position:{self.get_robot_position()},"
-                      f"deviation:{self.calculate_goal_direction(self.get_robot_position())}")
+        pos = self.get_robot_position()
+
+        if not pos:
+            raise Exception("Robot position not found, Make sure the slam_gmapping node is running with map and link_footprint frames")
+
+        global goal_position
+        if not goal_position:
+            goal_position = self.calculate_goal_position(pos,self.goal_x,self.goal_y,self.goal_z)
+
+        goal_direction = self.calculate_goal_direction(pos)
+
+
+
+        linear_x, _, state_description = ObstacleAvoider.calculate_velocity(regions, vel_normal_linear)
+        angular_z, state_description = self.calculate_turn(regions, goal_direction,pos)
+
+        if self.goal_accomplished(pos):
+            rospy.loginfo("Goal accomplished")
+            msg.linear.x = 0
+            msg.angular.z = 0
+            self.pub.publish(msg)
+            return None
+        rospy.loginfo(f"Setting speed: linear={str(linear_x)}, angular={str(angular_z)}, "
+                      f"state={str(state_description)},\npose={str(round(pos.translation.x,3))},{str(round(pos.translation.y,3))},{str(round(pos.translation.z,3))}, goal={str(round(goal_position.pose.position.x,3))},{str(round(goal_position.pose.position.y,3))},"
+                      f"\ngoal_direction:{str(goal_direction)}, "
+                      f"dist_to_goal:{str(self.dist_to_goal(pos))}")
         msg.linear.x = linear_x
         msg.angular.z = angular_z
+
+
 
         self.pub.publish(msg)
 
     def callback(self, data):
         d = [0 if x < 0.05 else x for x in data.ranges[-90::]+data.ranges[:90]]
         if not any(d):
-            print(1)
             regions = {
                 'right': min(data.ranges[55:90] or [float('inf')]),
                 'fright': min(data.ranges[25:55] or [float('inf')]),
@@ -134,7 +247,6 @@ class ObstacleAvoider:
                 'rear': min(data.ranges[150:210] or [float('inf')]),
             }
         else:
-            print(2)
             data.ranges = [float('inf') if x == 0 else x for x in data.ranges]
             regions = {
                 'right': min(data.ranges[55:90] or [float('inf')]),
