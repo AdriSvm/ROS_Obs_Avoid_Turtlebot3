@@ -103,14 +103,25 @@ class ObstacleAvoider:
         self.pub.publish(msg)
 
     def callback(self, data):
-        regions = {
-            'right': min(data.ranges[55:90] or [float('inf')]),
-            'fright': min(data.ranges[25:55] or [float('inf')]),
-            'front': min(data.ranges[-25::]+data.ranges[0:25] or [float('inf')]),
-            'fleft': min(data.ranges[-55:-25] or [float('inf')]),
-            'left': min(data.ranges[-90:-55] or [float('inf')]),
-            'rear': min(data.ranges[120:240] or [float('inf')]),
-        }
+        if all(data.ranges[-25::]+data.ranges[0:25]) < 0.09 and all(data.ranges[25:55]) < 0.09 and all(data.ranges[-55:-25]) < 0.09:
+            regions = {
+                'right': min(data.ranges[55:90] or [float('inf')]),
+                'fright': min(data.ranges[25:55] or [float('inf')]),
+                'front': min(data.ranges[-25::] + data.ranges[0:25] or [float('inf')]),
+                'fleft': min(data.ranges[-55:-25] or [float('inf')]),
+                'left': min(data.ranges[-90:-55] or [float('inf')]),
+                'rear': min(data.ranges[120:240] or [float('inf')]),
+            }
+        else:
+            data.ranges = [float('inf') if x == 0 else x for x in data.ranges]
+            regions = {
+                'right': min(data.ranges[55:90] or [float('inf')]),
+                'fright': min(data.ranges[25:55] or [float('inf')]),
+                'front': min(data.ranges[-25::] + data.ranges[0:25] or [float('inf')]),
+                'fleft': min(data.ranges[-55:-25] or [float('inf')]),
+                'left': min(data.ranges[-90:-55] or [float('inf')]),
+                'rear': min(data.ranges[120:240] or [float('inf')]),
+            }
 
 
         for region in regions_history:
