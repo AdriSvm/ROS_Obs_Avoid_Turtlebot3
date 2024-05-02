@@ -33,7 +33,8 @@ class ObstacleAvoider:
         min_distances = {region: min(regions_history[region]) for region in regions_history}
 
         # Ejemplo de decisión basada en el promedio de distancias
-        print(min_distances)
+        print(regions)
+        turning = None
         if regions['front'] < 0.1:
             if regions['rear'] > 0.05:
                 speed = -0.1
@@ -67,10 +68,10 @@ class ObstacleAvoider:
             state_desc = "No obstacle"
             if min_distances['fleft'] < 1.2 or min_distances['fright'] < 1.2:
                 speed = speed * min(min_distances['front'],3)
-                if regions['fleft'] < regions['fright'] and average_distances['fleft'] < 0.4:
+                if regions['fleft'] < regions['fright'] and average_distances['fleft'] < 0.1:
                         turn = 0.5 * max(average_distances['fleft'],0.75)
                         turning = 'right'
-                elif regions['fleft'] > regions['fright'] and average_distances['fright'] < 0.4:
+                elif regions['fleft'] > regions['fright'] and average_distances['fright'] < 0.1:
                         turn = -0.5 * max(average_distances['fright'],0.75)
                         turning = 'left'
 
