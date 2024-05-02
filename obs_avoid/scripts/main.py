@@ -14,8 +14,8 @@ regions_history = {
     'left':   deque(maxlen=history_length),
     'rear':   deque(maxlen=history_length),
 }
-
-actions_history = deque(maxlen=history_length)
+actions_history_length = 30
+actions_history = deque(maxlen=actions_history_length)
 
 class ObstacleAvoider:
 
@@ -105,12 +105,12 @@ class ObstacleAvoider:
     def callback(self, data):
         if all(data.ranges[-90::]+data.ranges[0:90]) < 0.02 :
             regions = {
-                'right': min(data.ranges[55:90] or [float('inf')]),
-                'fright': min(data.ranges[25:55] or [float('inf')]),
-                'front': min(data.ranges[-25::] + data.ranges[0:25] or [float('inf')]),
-                'fleft': min(data.ranges[-55:-25] or [float('inf')]),
-                'left': min(data.ranges[-90:-55] or [float('inf')]),
-                'rear': min(data.ranges[120:240] or [float('inf')]),
+                'right': 0,
+                'fright':0,
+                'front':0,
+                'fleft': 0,
+                'left': 0,
+                'rear': min(data.ranges[150:210] or [float('inf')]),
             }
         else:
             data.ranges = [float('inf') if x < 0.02 else x for x in data.ranges]
@@ -120,7 +120,7 @@ class ObstacleAvoider:
                 'front': min(data.ranges[-25::] + data.ranges[0:25] or [float('inf')]),
                 'fleft': min(data.ranges[-55:-25] or [float('inf')]),
                 'left': min(data.ranges[-90:-55] or [float('inf')]),
-                'rear': min(data.ranges[120:240] or [float('inf')]),
+                'rear': min(data.ranges[150:210] or [float('inf')]),
             }
 
 
