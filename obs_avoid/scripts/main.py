@@ -36,7 +36,7 @@ class ObstacleAvoider:
         print({i:round(j,2) for i,j in regions.items()})
         turning = None
         if regions['front'] < 0.1:
-            if regions['rear'] > 0.05:
+            if regions['rear'] > 0.3:
                 speed = -0.1
                 turn = 0
                 turning = 'none'
@@ -103,19 +103,20 @@ class ObstacleAvoider:
         self.pub.publish(msg)
 
     def callback(self, data):
-        if not any([0 if x < 0.02 else x for x in data.ranges[-90::]+data.ranges[:90]]):
+        d = [0 if x < 0.05 else x for x in data.ranges[-90::]+data.ranges[:90]]
+        if not any(d):
             print(1)
             regions = {
-                'right': 0,
-                'fright':0,
-                'front':0,
-                'fleft': 0,
-                'left': 0,
+                'right': min(data.ranges[55:90] or [float('inf')]),
+                'fright': min(data.ranges[25:55] or [float('inf')]),
+                'front': min(data.ranges[-25::] + data.ranges[0:25] or [float('inf')]),
+                'fleft': min(data.ranges[-55:-25] or [float('inf')]),
+                'left': min(data.ranges[-90:-55] or [float('inf')]),
                 'rear': min(data.ranges[150:210] or [float('inf')]),
             }
         else:
             print(2)
-            data.ranges = [float('inf') if x < 0.02 else x for x in data.ranges]
+            data.ranges = [float('inf') if x == 0 else x for x in data.ranges]
             regions = {
                 'right': min(data.ranges[55:90] or [float('inf')]),
                 'fright': min(data.ranges[25:55] or [float('inf')]),
