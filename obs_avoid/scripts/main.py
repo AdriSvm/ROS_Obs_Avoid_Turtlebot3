@@ -192,7 +192,7 @@ class ObstacleAvoider:
             return False if free_path_history.count(False) > len(free_path_history)*0.2 else True
 
         data = [x for x in data if x > 0.05 and not x == float('inf')]
-        if self.dist_to_goal(position) < (sum(data)/len(data)):
+        if not data or self.dist_to_goal(position) < (sum(data)/len(data)):
             free_path_history.append(True)
             return False if free_path_history.count(False) > len(free_path_history) * 0.2 else True
 
@@ -201,18 +201,23 @@ class ObstacleAvoider:
 
         if self.free_path(data.ranges,position):
             rospy.loginfo("FREE PATH")
-            if abs(round(goal_direction,2)-round(position.rotation.z,2)) < 0.05:
-                turn_angle = 0
+            if abs(round(goal_direction,2)-round(position.rotation.z,2)) < 0.1:
+                if goal_direction > position.rotation.z:
+                    turn_angle = 0.2 * min(abs(goal_direction - position.rotation.z), 1)
+                else:
+                    turn_angle = -0.2 * min(abs(goal_direction - position.rotation.z), 1)
             else:
-                linear_x = 0
-                euler1 = tf.transformations.euler_from_quaternion([position.rotation.x,position.rotation.y,position.rotation.z,position.rotation.w])
+                time.sleep(0.2)
+                linear_x = 0 #if abs(goal_direction - position.rotation.z) > 0.1 else linear_x * abs(goal_direction - position.rotation.z) * 2
+                '''euler1 = tf.transformations.euler_from_quaternion([position.rotation.x,position.rotation.y,position.rotation.z,position.rotation.w])
                 rot = euler1[2]
                 angle_diff = goal_direction - rot
                 angle_diff = (angle_diff + math.pi) % (2 * math.pi) - math.pi
-                if angle_diff > 0:
-                    turn_angle = 0.2 * min(abs(goal_direction - position.rotation.z) + 1, 1)
+                if angle_diff > 0:'''
+                if goal_direction > position.rotation.z:
+                    turn_angle = 0.2 * min(abs(goal_direction - position.rotation.z)*5, 1)
                 else:
-                    turn_angle = -0.2 * min(abs(goal_direction - position.rotation.z) + 1, 1)
+                    turn_angle = -0.2 * min(abs(goal_direction - position.rotation.z)*5, 1)
             state_description = "Free Path, Heading goal"
             return linear_x, turn_angle, state_description
 
