@@ -205,7 +205,11 @@ class ObstacleAvoider:
                 turn_angle = 0
             else:
                 linear_x = 0
-                if goal_direction > position.rotation.z:
+                euler1 = tf.transformations.euler_from_quaternion([position.rotation.x,position.rotation.y,position.rotation.z,position.rotation.w])
+                rot = euler1[2]
+                angle_diff = goal_direction - rot
+                angle_diff = (angle_diff + math.pi) % (2 * math.pi) - math.pi
+                if angle_diff > 0:
                     turn_angle = 0.2 * min(abs(goal_direction - position.rotation.z) + 1, 1)
                 else:
                     turn_angle = -0.2 * min(abs(goal_direction - position.rotation.z) + 1, 1)
