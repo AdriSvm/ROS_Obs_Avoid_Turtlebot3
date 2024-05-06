@@ -23,7 +23,7 @@ goal_position = None
 
 class ObstacleAvoider:
 
-    def __init__(self,goal_x=3.0,goal_y=3.0,goal_z=0.0):
+    def __init__(self,goal_x=1.0,goal_y=0.5,goal_z=0.0):
         time.sleep(0.2)
         rospy.init_node('obs_avoid', anonymous=True)
         self.pub = rospy.Publisher('/cmd_vel', Twist, queue_size=1)
@@ -165,8 +165,41 @@ class ObstacleAvoider:
 
         return speed, turn, state_desc
 
-    @staticmethod
-    def calculate_turn(regions, goal_direction,position,linear_x):
+    def free_path(self,ranges,position):
+        goal_dir = self.calculate_goal_direction(position)
+        rotation = position.rotation.z
+
+        dife = goal_dir - rotation
+        index = int(dife * (180/math.pi))
+
+        if index-10 < 0:
+            data = ranges[index-10::] + ranges[0:index+10]
+        else:
+            data = ranges[index-10:index+10]
+
+        if not any(data):
+            return False
+
+        data = [x for x in data if x > 0.05 and not x == float('inf')]
+        if self.dist_to_goal(position) < (sum(data)/len(data)):
+            return True
+
+
+    def calculate_turn(self,data,regions, goal_direction,position,linear_x):
+
+        if self.free_path(data.ranges,position):
+            rospy.loginfo("FREE PATH")
+            if abs(round(goal_direction,2)-round(position.rotation.z,2)) < 0.2:
+                turn_angle = 0
+            else:
+                linear_x = 0
+                if goal_direction > position.rotation.z:
+                    turn_angle = 0.2 * min(abs(goal_direction - position.rotation.z) + 1, 1)
+                else:
+                    turn_angle = -0.2 * min(abs(goal_direction - position.rotation.z) + 1, 1)
+            state_description = "Free Path, Heading goal"
+            return linear_x, turn_angle, state_description
+
         # Comenzamos asumiendo que el robot puede avanzar hacia el objetivo directamente
         if abs(round(goal_direction,2)-round(position.rotation.z,2)) < 0.2:
             turn_angle = 0
@@ -198,7 +231,7 @@ class ObstacleAvoider:
 
         return linear_x,turn_angle, state_description
 
-    def take_action(self, regions, vel_normal_linear=0.4, mode='assertive'):
+    def take_action(self, regions, data, vel_normal_linear=0.4, mode='assertive'):
         msg = Twist()
         pos = self.get_robot_position()
 
@@ -214,7 +247,7 @@ class ObstacleAvoider:
 
 
         linear_x, _, state_description = ObstacleAvoider.calculate_velocity(regions, vel_normal_linear)
-        linear_x, angular_z, state_description = self.calculate_turn(regions, goal_direction,pos,linear_x)
+        linear_x, angular_z, state_description = self.calculate_turn(data,regions, goal_direction,pos,linear_x)
 
         if self.goal_accomplished(pos):
             rospy.loginfo("Goal accomplished")
@@ -259,7 +292,7 @@ class ObstacleAvoider:
         for region in regions_history:
             regions_history[region].append(regions[region])
 
-        self.take_action(regions)
+        self.take_action(regions,data)
 
 
 if __name__ == '__main__':
