@@ -23,7 +23,7 @@ goal_position = None
 
 class ObstacleAvoider:
 
-    def __init__(self,goal_x=1.0,goal_y=0.5,goal_z=0.0):
+    def __init__(self,goal_x=1.0,goal_y=1.0,goal_z=0.0):
         time.sleep(0.2)
         rospy.init_node('obs_avoid', anonymous=True)
         self.pub = rospy.Publisher('/cmd_vel', Twist, queue_size=1)
@@ -185,7 +185,7 @@ class ObstacleAvoider:
             return True
 
 
-    def calculate_turn(self,data,regions, goal_direction,position,linear_x):
+    def calculate_turn(self,data,regions, goal_direction,position,linear_x,turn_angle,state_description):
 
         if self.free_path(data.ranges,position):
             rospy.loginfo("FREE PATH")
@@ -200,34 +200,17 @@ class ObstacleAvoider:
             state_description = "Free Path, Heading goal"
             return linear_x, turn_angle, state_description
 
-        # Comenzamos asumiendo que el robot puede avanzar hacia el objetivo directamente
-        if abs(round(goal_direction,2)-round(position.rotation.z,2)) < 0.2:
-            turn_angle = 0
-        else:
-            if goal_direction > position.rotation.z:
-                turn_angle = 0.2 * min(abs(goal_direction - position.rotation.z)+1,1)
-            else:
-                turn_angle = -0.2 * min(abs(goal_direction - position.rotation.z)+1,1)
-        state_description = "Heading towards the goal"
+        if state_description == 'No obstacle':
 
-        # Verificar si hay obstáculos en la dirección del objetivo
-        if regions['front'] < 1.0:  # Si hay un obstáculo cercano al frente
-            if regions['fleft'] < regions['fright']:
-                # Si el lado izquierdo está más libre que el derecho, gira a la izquierda
-                turn_angle += 0.5  # Ajustar ángulo adecuadamente
-                state_description = "Obstacle ahead, turning left"
+            if abs(round(goal_direction,2)-round(position.rotation.z,2)) < 0.05:
+                turn_angle = 0
             else:
-                # Si el lado derecho está más libre que el izquierdo, gira a la derecha
-                turn_angle -= 0.5  # Ajustar ángulo adecuadamente
-                state_description = "Obstacle ahead, turning right"
-        elif regions['fleft'] < 0.5:
-            # Si hay un obstáculo cercano a la izquierda, ajusta el giro hacia la derecha
-            turn_angle -= 0.3
-            state_description = "Obstacle on left, turning right"
-        elif regions['fright'] < 0.5:
-            # Si hay un obstáculo cercano a la derecha, ajusta el giro hacia la izquierda
-            turn_angle += 0.3
-            state_description = "Obstacle on right, turning left"
+                linear_x=0
+                if goal_direction > position.rotation.z:
+                    turn_angle = 0.1 * min(abs(goal_direction - position.rotation.z)+1,1)
+                else:
+                    turn_angle = -0.1 * min(abs(goal_direction - position.rotation.z)+1,1)
+            state_description = "Heading towards the goal"
 
         return linear_x,turn_angle, state_description
 
@@ -246,8 +229,8 @@ class ObstacleAvoider:
 
 
 
-        linear_x, _, state_description = ObstacleAvoider.calculate_velocity(regions, vel_normal_linear)
-        linear_x, angular_z, state_description = self.calculate_turn(data,regions, goal_direction,pos,linear_x)
+        linear_x, turn_angle, state_description = ObstacleAvoider.calculate_velocity(regions, vel_normal_linear)
+        linear_x, angular_z, state_description = self.calculate_turn(data,regions, goal_direction,pos,linear_x,turn_angle,state_description)
 
         if self.goal_accomplished(pos):
             rospy.loginfo("Goal accomplished")
