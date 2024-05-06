@@ -16,14 +16,17 @@ regions_history = {
     'left':   deque(maxlen=history_length),
     'rear':   deque(maxlen=history_length),
 }
-actions_history_length = 30
+actions_history_length = 15
 actions_history = deque(maxlen=actions_history_length)
 
 goal_position = None
 
+free_path_history_len = 5
+free_path_history = deque(maxlen=free_path_history_len)
+
 class ObstacleAvoider:
 
-    def __init__(self,goal_x=1.0,goal_y=1.0,goal_z=0.0):
+    def __init__(self,goal_x=-1.0,goal_y=-2.0,goal_z=0.0):
         time.sleep(0.2)
         rospy.init_node('obs_avoid', anonymous=True)
         self.pub = rospy.Publisher('/cmd_vel', Twist, queue_size=1)
@@ -75,7 +78,7 @@ class ObstacleAvoider:
 
     def get_robot_position(self):
         try:
-            trans = self.tf_buffer.lookup_transform('map', 'base_footprint', rospy.Time(0))
+            trans = self.tf_buffer.lookup_transform('map', 'base_link', rospy.Time(0))
             return trans.transform
         except tf2_ros.LookupException as e:
             rospy.logerr(f"Error al buscar transformación: {e}")
@@ -90,7 +93,9 @@ class ObstacleAvoider:
         dx = goal_position.pose.position.x - position.translation.x
         dy = goal_position.pose.position.y - position.translation.y
         print("diffs",dx,dy)
-        return math.atan2(dy, dx)
+        rot = math.atan2(dy, dx) if -2 * math.pi < math.atan2(dy, dx) < 2 * math.pi else math.atan2(dy, dx) / (2 * math.pi)
+        normalized_rot = rot / math.pi
+        return normalized_rot
 
     def dist_to_goal(self,position):
         return math.sqrt((goal_position.pose.position.x - position.translation.x)**2 + (goal_position.pose.position.y - position.translation.y)**2)
@@ -167,29 +172,36 @@ class ObstacleAvoider:
 
     def free_path(self,ranges,position):
         goal_dir = self.calculate_goal_direction(position)
-        rotation = position.rotation.z
+        current_euler = tf.transformations.euler_from_quaternion(
+            [position.rotation.x, position.rotation.y, position.rotation.z, position.rotation.w]
+        )
+        rotation = current_euler[2]
 
         dife = goal_dir - rotation
-        index = int(dife * (180/math.pi))
+        dife_err = (dife+math.pi) % (2*math.pi) - math.pi
+        index = int(dife_err * (len(ranges)/(2*math.pi)) )
 
         if index-10 < 0:
             data = ranges[index-10::] + ranges[0:index+10]
         else:
             data = ranges[index-10:index+10]
 
+        global free_path_history
         if not any(data):
-            return False
+            free_path_history.append(False)
+            return False if free_path_history.count(False) > len(free_path_history)*0.2 else True
 
         data = [x for x in data if x > 0.05 and not x == float('inf')]
         if self.dist_to_goal(position) < (sum(data)/len(data)):
-            return True
+            free_path_history.append(True)
+            return False if free_path_history.count(False) > len(free_path_history) * 0.2 else True
 
 
     def calculate_turn(self,data,regions, goal_direction,position,linear_x,turn_angle,state_description):
 
         if self.free_path(data.ranges,position):
             rospy.loginfo("FREE PATH")
-            if abs(round(goal_direction,2)-round(position.rotation.z,2)) < 0.2:
+            if abs(round(goal_direction,2)-round(position.rotation.z,2)) < 0.05:
                 turn_angle = 0
             else:
                 linear_x = 0
@@ -240,8 +252,8 @@ class ObstacleAvoider:
             return None
         rospy.loginfo(f"Setting speed: linear={str(linear_x)}, angular={str(angular_z)}, "
                       f"state={str(state_description)},\npose={str(round(pos.translation.x,3))},{str(round(pos.translation.y,3))},{str(round(pos.rotation.z,3))}, goal={str(round(goal_position.pose.position.x,3))},{str(round(goal_position.pose.position.y,3))},"
-                      f"\ngoal_direction:{str(goal_direction)}, "
-                      f"dist_to_goal:{str(self.dist_to_goal(pos))}")
+                      f"\ngoal_direction:{str(round(goal_direction,2))}, "
+                      f"dist_to_goal:{str(round(self.dist_to_goal(pos),2))}")
         msg.linear.x = linear_x
         msg.angular.z = angular_z
 
