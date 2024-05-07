@@ -156,7 +156,7 @@ class ObstacleAvoider:
         rights = sum([1 if action == 'right' else 0 for action in actions_history])
         last_turn = actions_history[-1] if actions_history else None
 
-        if last_turn == 'left' and lefts < len(actions_history)*0.7 and rights > len(actions_history)*0.2:
+        '''if last_turn == 'left' and lefts < len(actions_history)*0.7 and rights > len(actions_history)*0.2:
             turn = -abs(turn)
             turning = 'left'
             state_desc = "Avoiding right turn"
@@ -164,7 +164,7 @@ class ObstacleAvoider:
         if last_turn == 'right' and rights < len(actions_history)*0.7 and lefts > len(actions_history)*0.2:
             turn = abs(turn)
             turning = 'right'
-            state_desc = "Avoiding left turn"
+            state_desc = "Avoiding left turn"'''
 
         actions_history.append(turning)
 
@@ -201,14 +201,14 @@ class ObstacleAvoider:
 
         if self.free_path(data.ranges,position):
             rospy.loginfo("FREE PATH")
-            if abs(round(goal_direction,2)-round(position.rotation.z,2)) < 0.1:
+            if abs(round(goal_direction,2)-round(position.rotation.z,2)) < 0.05:
                 if goal_direction > position.rotation.z:
                     turn_angle = 0.2 * min(abs(goal_direction - position.rotation.z), 1)
                 else:
                     turn_angle = -0.2 * min(abs(goal_direction - position.rotation.z), 1)
             else:
                 time.sleep(0.2)
-                linear_x = 0 #if abs(goal_direction - position.rotation.z) > 0.1 else linear_x * abs(goal_direction - position.rotation.z) * 2
+                linear_x = 0 if abs(goal_direction - position.rotation.z) > 0.1 else linear_x * abs(goal_direction - position.rotation.z) * 2
                 '''euler1 = tf.transformations.euler_from_quaternion([position.rotation.x,position.rotation.y,position.rotation.z,position.rotation.w])
                 rot = euler1[2]
                 angle_diff = goal_direction - rot
