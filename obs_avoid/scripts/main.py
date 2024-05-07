@@ -300,4 +300,10 @@ class ObstacleAvoider:
 
 
 if __name__ == '__main__':
-    ObstacleAvoider()
+
+    x = rospy.get_param('~goal_x',0)
+    y = rospy.get_param('~goal_y',0)
+
+    rospy.loginfo(f"Initiating with goal: {x,y}")
+
+    ObstacleAvoider(x,y)
