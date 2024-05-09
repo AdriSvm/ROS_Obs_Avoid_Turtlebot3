@@ -38,9 +38,6 @@ class ObstacleAvoider:
         self.goal_y = goal_y
         self.goal_z = goal_z
 
-        #if not robot_pos:
-        #    raise Exception("Robot position not found, Make sure the slam_gmapping node is running with map and link_footprint frames")
-
         global goal_position
         goal_position = self.calculate_goal_position(robot_pos,goal_x,goal_y,goal_z)
 
@@ -105,12 +102,14 @@ class ObstacleAvoider:
 
     @staticmethod
     def calculate_velocity(regions, speed=1, turn=0.0):
-        # Analizar el historial para tomar decisiones
+        # Analyse historic data to better decisions
         average_distances = {region: np.mean(regions_history[region]) for region in regions_history}
         min_distances = {region: min(regions_history[region]) for region in regions_history}
 
-        # Ejemplo de decisión basada en el promedio de distancias
-        print({i:round(j,2) for i,j in regions.items()})
+        # We'll use the average of historic data and also the actual data to make better decisions
+        # There are mainly 3 modes, No obstacle, Light Obstacle and Heavy Obstacle
+        # Only with No obstacle mode, the robot will try to reach the goal
+        # print({i:round(j,2) for i,j in regions.items()})
         turning = None
         if regions['front'] < 0.1:
             if regions['rear'] > 0.3:
@@ -156,7 +155,9 @@ class ObstacleAvoider:
         rights = sum([1 if action == 'right' else 0 for action in actions_history])
         last_turn = actions_history[-1] if actions_history else None
 
-        '''if last_turn == 'left' and lefts < len(actions_history)*0.7 and rights > len(actions_history)*0.2:
+        '''
+        #TODO: Upgrade the decision making process on erratic turning movements
+        if last_turn == 'left' and lefts < len(actions_history)*0.7 and rights > len(actions_history)*0.2:
             turn = -abs(turn)
             turning = 'left'
             state_desc = "Avoiding right turn"
@@ -164,13 +165,15 @@ class ObstacleAvoider:
         if last_turn == 'right' and rights < len(actions_history)*0.7 and lefts > len(actions_history)*0.2:
             turn = abs(turn)
             turning = 'right'
-            state_desc = "Avoiding left turn"'''
+            state_desc = "Avoiding left turn"
+            '''
 
         actions_history.append(turning)
 
         return speed, turn, state_desc
 
     def free_path(self,ranges,position):
+        # Function to calculate if there exists a direct path to the goal, to optimise trajectory
         goal_dir = self.calculate_goal_direction(position)
         current_euler = tf.transformations.euler_from_quaternion(
             [position.rotation.x, position.rotation.y, position.rotation.z, position.rotation.w]
@@ -200,20 +203,16 @@ class ObstacleAvoider:
     def calculate_turn(self,data,regions, goal_direction,position,linear_x,turn_angle,state_description):
 
         if self.free_path(data.ranges,position):
-            rospy.loginfo("FREE PATH")
             if abs(round(goal_direction,2)-round(position.rotation.z,2)) < 0.05:
+                # Linear velocity is not changed, maintains the decision made by calculate_velocity
                 if goal_direction > position.rotation.z:
                     turn_angle = 0.2 * min(abs(goal_direction - position.rotation.z), 1)
                 else:
                     turn_angle = -0.2 * min(abs(goal_direction - position.rotation.z), 1)
             else:
                 time.sleep(0.2)
-                linear_x = 0 #if abs(goal_direction - position.rotation.z) > 0.1 else linear_x * abs(goal_direction - position.rotation.z) / 2
-                '''euler1 = tf.transformations.euler_from_quaternion([position.rotation.x,position.rotation.y,position.rotation.z,position.rotation.w])
-                rot = euler1[2]
-                angle_diff = goal_direction - rot
-                angle_diff = (angle_diff + math.pi) % (2 * math.pi) - math.pi
-                if angle_diff > 0:'''
+                # Progressive linear velocity to not make heavy changes in velocity
+                linear_x = 0 if abs(goal_direction - position.rotation.z) > 0.1 else linear_x * abs(goal_direction - position.rotation.z) / 2
                 if goal_direction > position.rotation.z:
                     turn_angle = 0.2 * min(abs(goal_direction - position.rotation.z)*5, 1)
                 else:
@@ -222,7 +221,7 @@ class ObstacleAvoider:
             return linear_x, turn_angle, state_description
 
         if state_description == 'No obstacle':
-
+            # If there is no obstacle and a direct path couldn't be made, then the robot will try to rotate to the goal while moving forward
             if abs(round(goal_direction,2)-round(position.rotation.z,2)) < 0.05:
                 turn_angle = 0
             else:
@@ -236,6 +235,7 @@ class ObstacleAvoider:
         return linear_x,turn_angle, state_description
 
     def take_action(self, regions, data, vel_normal_linear=0.4, mode='assertive'):
+        # Main action to take, will call to all the other functions to make a decision
         msg = Twist()
         pos = self.get_robot_position()
 
@@ -248,8 +248,6 @@ class ObstacleAvoider:
 
         goal_direction = self.calculate_goal_direction(pos)
 
-
-
         linear_x, turn_angle, state_description = ObstacleAvoider.calculate_velocity(regions, vel_normal_linear)
         linear_x, angular_z, state_description = self.calculate_turn(data,regions, goal_direction,pos,linear_x,turn_angle,state_description)
 
@@ -259,10 +257,13 @@ class ObstacleAvoider:
             msg.angular.z = 0
             self.pub.publish(msg)
             return None
+
+        # Thanks to this loginfo, we have a very rich information while the robot is moving, through the terminal
         rospy.loginfo(f"Setting speed: linear={str(linear_x)}, angular={str(angular_z)}, "
                       f"state={str(state_description)},\npose={str(round(pos.translation.x,3))},{str(round(pos.translation.y,3))},{str(round(pos.rotation.z,3))}, goal={str(round(goal_position.pose.position.x,3))},{str(round(goal_position.pose.position.y,3))},"
                       f"\ngoal_direction:{str(round(goal_direction,2))}, "
                       f"dist_to_goal:{str(round(self.dist_to_goal(pos),2))}")
+
         msg.linear.x = linear_x
         msg.angular.z = angular_z
 
@@ -303,7 +304,6 @@ if __name__ == '__main__':
 
     x = rospy.get_param('goal_x',0)
     y = rospy.get_param('goal_y',0)
-    print(f"Initiating with goal: {x,y}")
     rospy.loginfo(f"Initiating with goal: {x,y}")
 
     ObstacleAvoider(x,y)
