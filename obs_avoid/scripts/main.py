@@ -70,7 +70,6 @@ class ObstacleAvoider:
         destination.pose.orientation.y = new_rotation[1]
         destination.pose.orientation.z = new_rotation[2]
         destination.pose.orientation.w = new_rotation[3]
-        print(destination.pose.position.x,destination.pose.position.y)
         return destination
 
     def get_robot_position(self):
