@@ -4,7 +4,6 @@ import rospy,time, tf2_ros, math
 from sensor_msgs.msg import LaserScan
 from geometry_msgs.msg import Twist, PoseStamped, Point
 from collections import deque
-from tf2_geometry_msgs import PointStamped
 import tf.transformations
 
 history_length = 10
