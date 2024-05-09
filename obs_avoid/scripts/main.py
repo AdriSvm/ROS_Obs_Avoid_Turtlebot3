@@ -87,7 +87,6 @@ class ObstacleAvoider:
 
         dx = goal_position.pose.position.x - position.translation.x
         dy = goal_position.pose.position.y - position.translation.y
-        print("diffs",dx,dy)
         rot = math.atan2(dy, dx) if -2 * math.pi < math.atan2(dy, dx) < 2 * math.pi else math.atan2(dy, dx) / (2 * math.pi)
         normalized_rot = rot / math.pi
         return normalized_rot
